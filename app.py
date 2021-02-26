@@ -8,12 +8,8 @@ from pandas import DataFrame
 URL = 'https://stooq.pl/q/d/l/?s=wig20&i=d'
 
 SET_SIZE = 1000
-X_LIMIT = [SET_SIZE // 10, SET_SIZE]
+X_LIMIT = [0, 0]
 Y_LIMIT = [-200, 200]
-
-# SET_SIZE = 300
-# X_LIMIT = [SET_SIZE - 100, SET_SIZE]
-# Y_LIMIT = [-200, 200]
 
 
 def EMA(arr: ndarray, period: int, offset: int) -> float:
@@ -22,58 +18,66 @@ def EMA(arr: ndarray, period: int, offset: int) -> float:
     Offset is counted from the current day.
     """
     a = 2 / (period + 1)
-    cur_day = arr.size - offset
     upper_sum = 0.0
     lower_sum = 0.0
 
-    power = 0
-    for i in range(cur_day - 1, cur_day - 1 - period - 1, -1):
-        upper_sum += arr[i] * (1 - a) ** power
-        lower_sum += (1 - a) ** power
-        power += 1
+    for i in range(period + 1):
+        if offset - i < 0:
+            break
+        upper_sum += arr[offset - i] * (1 - a) ** i
+        lower_sum += (1 - a) ** i
 
     return upper_sum / lower_sum
 
-def get_MACD(df: DataFrame, records: int=SET_SIZE) -> ndarray:
-    MACD = []
-    values = df.to_numpy()
-    values = values[:,4]
 
-    for i in range(records, 0, -1):
-        MACD.append(EMA(values, period=12, offset=i) - EMA(values, period=26, offset=i))
+def get_MACD(df: DataFrame) -> ndarray:
+    MACD = []
+
+    values = get_values(df)
+
+    for i in range(values.size):
+        MACD.append(EMA(values, 12, i) - EMA(values, 26, i))
 
     return np.asarray(MACD)
 
-def get_signal(arr: ndarray, records: int=SET_SIZE) -> ndarray:
+
+def get_signal(arr: ndarray) -> ndarray:
     signal = []
 
-    for i in range(records, 0, -1):
+    for i in range(arr.size):
         signal.append(EMA(arr, period=9, offset=i))
 
     return np.asarray(signal)
 
-def plot_values(df: DataFrame) -> None:
-    x = [i for i in range(SET_SIZE)]
-    
+
+def get_values(df: DataFrame) -> ndarray:
     val = df.to_numpy()
     val = val[:, 4]
-    
-    val = val[val.size - SET_SIZE::]
-    
+
+    return val
+
+
+def plot_values(df: DataFrame) -> None:
+    val = get_values(df)
+
+    x = [i for i in range(val.size)]
+
     plt.plot(x, val)
     plt.xlabel('Days')
     plt.ylabel('Stock closing values')
-    plt.legend()
     plt.title('WIG20 values')
     axes = plt.gca()
+    X_LIMIT[1] = len(x)
     axes.set_xlim(X_LIMIT)
     plt.show()
 
+
 def plot_MACD(df: DataFrame) -> None:
-    x = [i for i in range(SET_SIZE)]
 
     MACD = get_MACD(df)
-    signal = get_signal(MACD)    
+    signal = get_signal(MACD)
+
+    x = [i for i in range(MACD.size)]
 
     plt.plot(x, MACD, label='MACD')
     plt.plot(x, signal, label='Signal')
@@ -82,36 +86,53 @@ def plot_MACD(df: DataFrame) -> None:
     plt.legend()
     plt.title('MACD indicator')
     axes = plt.gca()
+    X_LIMIT[1] = len(x)
     axes.set_xlim(X_LIMIT)
     axes.set_ylim(Y_LIMIT)
     plt.show()
 
-def simulate(df: DataFrame):
+
+def simulate(df: DataFrame) -> None:
     resources = 1000
+    volumes = 0
 
     MACD = get_MACD(df)
-    signal = get_signal(MACD)  
+    values = get_values(df)
+    signal = get_signal(MACD)
 
-    for i in range(1, MACD.size):
-        if MACD[i - 1] > signal[i - 1] and MACD[i] < signal[i]:
-            # Selling signal
-            pass
-        elif MACD[i - 1] < signal[i - 1] and MACD[i] > signal[i]:
-            # Buying signal
-            pass
-        else:
-            # Do nothing
-            pass
-    pass
-    
-def predict_action(df: DataFrame) -> str:
-    pass
+    buy = []
+    sell = []
+
+    for i in range(MACD.size):
+        if MACD[i - 1] < signal[i - 1] and MACD[i] > signal[i]:
+            buy.append(i)
+        elif MACD[i - 1] > signal[i - 1] and MACD[i] < signal[i]:
+            if len(buy) > 0:
+                sell.append(i)
+
+    for i, value in enumerate(values):
+        if i in buy:
+            volumes = resources / value
+            resources = 0
+            buy.pop(0)
+        elif i in sell:
+            resources = value * volumes
+            volumes = 0
+            sell.pop(0)
+
+            if not sell:
+                break
+
+    # print(f'Final resources = {resources}')
 
 
-def main():
+def main() -> None:
     df = pd.read_csv(URL)
+    trimmed_df = df.tail(1000)
     plot_MACD(df)
     plot_values(df)
+    simulate(df)
+
 
 if __name__ == '__main__':
     main()
