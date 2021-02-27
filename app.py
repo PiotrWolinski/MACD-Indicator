@@ -4,16 +4,20 @@ from matplotlib import pyplot as plt
 from numpy import ndarray
 from pandas import DataFrame
 
-URL = 'https://stooq.pl/q/d/l/?s=wig20&i=d'
 
+URL = 'https://stooq.pl/q/d/l/?s=wig20&i=d'
 SET_SIZE = 1000
 INITIAL_RESOURCES = 10000
+SHORT = 5
+LONG = 35
+SIGNAL_PERIOD = 5
 X_LIMIT = [0, 0]
 Y_LIMIT = [-200, 200]
 
 
 def EMA(arr: ndarray, period: int, offset: int) -> float:
-    """Returns EMA based on the close value, from last days
+    """
+    Returns EMA based on the close value, from last days
     specified by the period variable.
     Offset is counted from the current day.
     """
@@ -29,49 +33,45 @@ def EMA(arr: ndarray, period: int, offset: int) -> float:
 
     return upper_sum / lower_sum
 
-
-def get_MACD(df: DataFrame) -> ndarray:
+def get_MACD(df: DataFrame, short=SHORT, long=LONG) -> ndarray:
+    """
+    Returns list of MACD values based on the values from the df.
+    short and long variables are for specifying EMA range.
+    """
     MACD = []
 
     values = get_values(df)
-    short = 5
-    long = 35
 
     for i in range(values.size):
         MACD.append(EMA(values, short, i) - EMA(values, long, i))
 
     return np.asarray(MACD)
 
-
-def get_signal(arr: ndarray) -> ndarray:
+def get_signal(arr: ndarray, period=SIGNAL_PERIOD) -> ndarray:
+    """
+    Returns list of the signal values based on the provided MACD values list.
+    Period variable is for specifying the EMA range.
+    """
     signal = []
-    period = 5
 
     for i in range(arr.size):
         signal.append(EMA(arr, period=period, offset=i))
 
     return np.asarray(signal)
 
-
 def get_values(df: DataFrame) -> ndarray:
+    """
+    Returns stock values based on the provided df.
+    """
     val = df.to_numpy()
     val = val[:, 4]
 
     return val
 
-def get_histogram(df: DataFrame) -> ndarray:
-    MACD = get_MACD(df)
-    signal = get_signal(MACD)
-
-    histogram = []
-
-    for i in range(MACD.size):
-        histogram.append(MACD[i] - signal[i])
-
-    return np.asarray(histogram)
-
-
 def plot_values(df: DataFrame) -> None:
+    """
+    Plots the values from the df.
+    """
     val = get_values(df)
 
     x = [i for i in range(val.size)]
@@ -85,8 +85,10 @@ def plot_values(df: DataFrame) -> None:
     axes.set_xlim(X_LIMIT)
     plt.show()
 
-
 def plot_MACD(df: DataFrame) -> None:
+    """
+    Plots the MACD and signal lines based on the values from the df.
+    """
     MACD = get_MACD(df)
     signal = get_signal(MACD)
 
@@ -106,6 +108,10 @@ def plot_MACD(df: DataFrame) -> None:
     plt.show()
 
 def simulate(df: DataFrame) -> None:
+    """
+    Simulates buying/selling stocks with provided resources,
+    using crossovers strategy.
+    """
     resources = INITIAL_RESOURCES
     volumes = 0
 
