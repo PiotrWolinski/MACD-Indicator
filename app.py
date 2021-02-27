@@ -1,13 +1,13 @@
-import pandas as pd
 import numpy as np
-from numpy import ndarray
+import pandas as pd
 from matplotlib import pyplot as plt
+from numpy import ndarray
 from pandas import DataFrame
-
 
 URL = 'https://stooq.pl/q/d/l/?s=wig20&i=d'
 
 SET_SIZE = 1000
+INITIAL_RESOURCES = 10000
 X_LIMIT = [0, 0]
 Y_LIMIT = [-200, 200]
 
@@ -34,18 +34,21 @@ def get_MACD(df: DataFrame) -> ndarray:
     MACD = []
 
     values = get_values(df)
+    short = 5
+    long = 35
 
     for i in range(values.size):
-        MACD.append(EMA(values, 12, i) - EMA(values, 26, i))
+        MACD.append(EMA(values, short, i) - EMA(values, long, i))
 
     return np.asarray(MACD)
 
 
 def get_signal(arr: ndarray) -> ndarray:
     signal = []
+    period = 5
 
     for i in range(arr.size):
-        signal.append(EMA(arr, period=9, offset=i))
+        signal.append(EMA(arr, period=period, offset=i))
 
     return np.asarray(signal)
 
@@ -55,6 +58,17 @@ def get_values(df: DataFrame) -> ndarray:
     val = val[:, 4]
 
     return val
+
+def get_histogram(df: DataFrame) -> ndarray:
+    MACD = get_MACD(df)
+    signal = get_signal(MACD)
+
+    histogram = []
+
+    for i in range(MACD.size):
+        histogram.append(MACD[i] - signal[i])
+
+    return np.asarray(histogram)
 
 
 def plot_values(df: DataFrame) -> None:
@@ -73,7 +87,6 @@ def plot_values(df: DataFrame) -> None:
 
 
 def plot_MACD(df: DataFrame) -> None:
-
     MACD = get_MACD(df)
     signal = get_signal(MACD)
 
@@ -85,15 +98,15 @@ def plot_MACD(df: DataFrame) -> None:
     plt.ylabel('MACD value')
     plt.legend()
     plt.title('MACD indicator')
+
     axes = plt.gca()
     X_LIMIT[1] = len(x)
     axes.set_xlim(X_LIMIT)
     axes.set_ylim(Y_LIMIT)
     plt.show()
 
-
 def simulate(df: DataFrame) -> None:
-    resources = 1000
+    resources = INITIAL_RESOURCES
     volumes = 0
 
     MACD = get_MACD(df)
@@ -102,6 +115,10 @@ def simulate(df: DataFrame) -> None:
 
     buy = []
     sell = []
+
+    max = resources
+
+    print(f'Initial state: resources={resources}')
 
     for i in range(MACD.size):
         if MACD[i - 1] < signal[i - 1] and MACD[i] > signal[i]:
@@ -112,25 +129,29 @@ def simulate(df: DataFrame) -> None:
 
     for i, value in enumerate(values):
         if i in buy:
-            volumes = resources / value
-            resources = 0
+            volumes = resources // value
+            resources -= volumes * value
             buy.pop(0)
         elif i in sell:
-            resources = value * volumes
+            resources += value * volumes
             volumes = 0
             sell.pop(0)
 
             if not sell:
                 break
-
-    # print(f'Final resources = {resources}')
+                
+        if resources > max:
+            max = resources
+            
+    print(f'Final state: resources={resources}, profit={resources - INITIAL_RESOURCES}')
+    print(f'Highest profit={max - INITIAL_RESOURCES}')
 
 
 def main() -> None:
     df = pd.read_csv(URL)
     trimmed_df = df.tail(1000)
-    plot_MACD(df)
-    plot_values(df)
+    # plot_MACD(trimmed_df)
+    # plot_values(trimmed_df)
     simulate(df)
 
 
